@@ -2,6 +2,8 @@
 BINARY       := bin/api
 PKG          := ./...
 DATABASE_URL ?= postgres://app:app@localhost:5432/app?sslmode=disable
+# Database used by the adapter contract tests. When unset, those tests skip.
+TEST_DATABASE_URL ?= $(DATABASE_URL)
 
 .PHONY: help
 help: ## Show this help
@@ -21,8 +23,16 @@ run: ## Run the API (in-memory driver by default)
 	go run ./cmd/api
 
 .PHONY: test
-test: ## Run all tests
+test: ## Run all tests (Postgres contract tests skip without a database)
 	go test -race -count=1 $(PKG)
+
+.PHONY: test-db
+test-db: ## Start only the Postgres service the contract tests need
+	docker compose up -d db
+
+.PHONY: test-integration
+test-integration: ## Run all tests INCLUDING the Postgres contract (needs test-db)
+	TEST_DATABASE_URL="$(TEST_DATABASE_URL)" go test -race -count=1 $(PKG)
 
 .PHONY: cover
 cover: ## Run tests with coverage report

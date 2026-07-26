@@ -85,6 +85,24 @@ make run
 
 L'API écoute sur `:8080`.
 
+### Tests de contrat des adaptateurs
+
+Les adaptateurs `memory` et `postgres` sont tenus par une **suite de tests de
+contrat unique** (`internal/adapters/contract`), écrite une fois contre chaque
+port et rejouée contre les deux implémentations. C'est ce qui fait de
+« les adaptateurs sont interchangeables » une propriété vérifiée plutôt qu'une
+promesse : si les deux divergent, la même suite échoue sur l'un d'eux.
+
+`make test` ignore la série Postgres faute de base de données. Pour la jouer
+réellement :
+
+```bash
+make test-db            # démarre uniquement Postgres via docker compose
+make test-integration   # rejoue toute la suite, contrats Postgres compris
+```
+
+La CI fournit un service Postgres, donc les deux séries s'exécutent à chaque push.
+
 ```bash
 # Health
 curl localhost:8080/health

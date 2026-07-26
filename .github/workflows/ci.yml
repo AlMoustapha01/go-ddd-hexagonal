@@ -8,6 +8,28 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+
+    # The adapter contract tests run against a real database. Without this
+    # service they would silently skip, and the Postgres adapters would go
+    # unexercised — the gap these tests exist to close.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d app"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    env:
+      TEST_DATABASE_URL: postgres://app:app@localhost:5432/app?sslmode=disable
+
     steps:
       - uses: actions/checkout@v4
 
