@@ -28,9 +28,20 @@ type Publisher struct {
 }
 
 // NewPublisher builds an outbox-backed publisher.
+//
+// Record ids are UUID version 7 (time-ordered) rather than v4. The outbox is
+// the busiest table in the system — one row per domain event — so it is where
+// the insert locality of a sequential primary key pays off most: rows are
+// appended to the rightmost page of the index instead of dirtying a random one
+// each time. The relay also drains records oldest-first, which a time-ordered
+// key keeps close together on disk.
 func NewPublisher(store shared.OutboxStore) *Publisher {
-	return &Publisher{store: store, newID: uuid.NewString}
+	return &Publisher{store: store, newID: newV7String}
 }
+
+// newV7String mints a time-ordered record id. Must does not add a failure mode:
+// uuid.NewString is itself Must(NewRandom()).String().
+func newV7String() string { return uuid.Must(uuid.NewV7()).String() }
 
 var _ shared.EventPublisher = (*Publisher)(nil)
 

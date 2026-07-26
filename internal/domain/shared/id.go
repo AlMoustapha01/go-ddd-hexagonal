@@ -36,7 +36,21 @@ var ErrInvalidID = errors.New("shared: invalid identifier")
 type ID[T any] struct{ value uuid.UUID }
 
 // NewID generates a fresh identity for the aggregate T.
-func NewID[T any]() ID[T] { return ID[T]{value: uuid.New()} }
+//
+// It mints a UUID version 7: the first 48 bits are the Unix timestamp in
+// milliseconds, so identities sort chronologically. That matters at the storage
+// layer — every aggregate here is keyed by its id, and a time-ordered primary
+// key makes inserts land on the rightmost page of the B-tree index instead of
+// scattering across it, which is what random (v4) identifiers do.
+//
+// Trade-off to be aware of: a v7 identity PUBLISHES ITS CREATION TIME to anyone
+// who can read it. If ids ever leak into URLs or API responses where the
+// creation instant is sensitive, that is a real disclosure — switch back to
+// uuid.New() (v4) here and the whole domain follows.
+//
+// Must is not a new failure mode: uuid.New() is itself Must(NewRandom()), so
+// this code already panicked if crypto/rand failed.
+func NewID[T any]() ID[T] { return ID[T]{value: uuid.Must(uuid.NewV7())} }
 
 // ParseID parses the string form of an identity, returning ErrInvalidID when the
 // input is not a UUID.
