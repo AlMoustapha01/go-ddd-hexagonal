@@ -1,0 +1,71 @@
+# golangci-lint configuration (schema v2 — golangci-lint v2.x).
+# Docs: https://golangci-lint.run/usage/configuration/
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    # Core
+    - errcheck        # unchecked errors
+    - govet           # suspicious constructs
+    - ineffassign     # ineffectual assignments
+    - staticcheck     # extensive static analysis (includes gosimple/stylecheck)
+    - unused          # unused code
+    # Extra quality
+    - revive          # golint replacement, style
+    - gosec           # security issues
+    - gocritic        # opinionated diagnostics
+    - gocyclo         # cyclomatic complexity
+    - misspell        # misspellings
+    - unconvert       # unnecessary conversions
+    - unparam         # unused function parameters
+    - bodyclose       # HTTP response bodies closed
+    - noctx           # HTTP requests without context
+    - errorlint       # correct errors.Is/As usage
+    - godot           # comments end with a period
+    - whitespace
+
+  settings:
+    gocyclo:
+      min-complexity: 15
+    revive:
+      # Run revive's sensible defaults. The "exported" rule (a doc comment on
+      # every exported symbol) is intentionally NOT enabled: types carry group
+      # comments and demanding one per getter/method is noise, not signal.
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: if-return
+        - name: increment-decrement
+        - name: var-declaration
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: superfluous-else
+        - name: unreachable-code
+    godot:
+      scope: declarations
+
+  exclusions:
+    rules:
+      # Test files: relax some rules.
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
+          - gocyclo
+          - unparam
+          - errorlint
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

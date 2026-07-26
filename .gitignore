@@ -1,0 +1,18 @@
+# Binaries
+/bin/
+*.exe
+*.out
+
+# Env
+.env
+
+# Go
+vendor/
+coverage.out
+coverage.html
+
+# Editors
+.idea/
+.vscode/
+*.swp
+.DS_Store
