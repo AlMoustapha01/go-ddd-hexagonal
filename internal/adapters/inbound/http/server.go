@@ -31,16 +31,21 @@ func NewServer(addr string, deps ServerDeps, log *slog.Logger) *http.Server {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
+	r.Use(requestContext) // must follow RequestID: it reads what chi just set
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(15 * time.Second))
 
+	// Deliberately outside the access log: a liveness probe polled every ten
+	// seconds would add roughly 8,600 lines of noise a day. Mounting the access
+	// log on the API group below is enough — no exclusion list to maintain.
 	r.Get("/health", healthCheck)
 
 	userHandler := NewUserHandler(deps.UserUC, log)
 	orderHandler := NewOrderHandler(deps.OrderUC, deps.OrderQueries, log)
 	accountHandler := NewAccountHandler(deps.AccountUC, deps.AccountQueries, log)
 	r.Route("/api/v1", func(api chi.Router) {
+		api.Use(accessLog(log))
 		userHandler.Routes(api)
 		orderHandler.Routes(api)
 		accountHandler.Routes(api)
