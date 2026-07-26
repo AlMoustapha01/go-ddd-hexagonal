@@ -122,6 +122,14 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 	// dispatches inline for low latency; this catches anything left by a crash.
 	relay.Start(ctx, 2*time.Second)
 
+	// Readiness probe. With Postgres, "can this instance serve?" means "does the
+	// database answer?". The in-memory driver has no external dependency, so it
+	// leaves the check nil and /ready always reports ready.
+	var ready httpadapter.ReadinessCheck
+	if pool != nil {
+		ready = pool.Ping
+	}
+
 	// Driving adapter.
 	server := httpadapter.NewServer(cfg.HTTPAddr, httpadapter.ServerDeps{
 		UserUC:         userUC,
@@ -129,6 +137,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 		OrderQueries:   orderQueries,
 		AccountUC:      accountUC,
 		AccountQueries: accountQueries,
+		Ready:          ready,
 	}, log)
 
 	return &App{Server: server, pool: pool, relay: relay}, nil

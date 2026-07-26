@@ -140,7 +140,8 @@ make run
 
 | Méthode | Chemin                             | Description               |
 |---------|------------------------------------|---------------------------|
-| GET     | `/health`                          | Liveness                  |
+| GET     | `/health`                          | **Liveness** — le process répond (200 même base injoignable) |
+| GET     | `/ready`                           | **Readiness** — les dépendances répondent (**503** si la base ne répond pas) |
 | POST    | `/api/v1/users`                    | Créer un utilisateur      |
 | GET     | `/api/v1/users?limit=&offset=`     | Lister                    |
 | GET     | `/api/v1/users/{id}`               | Récupérer par ID          |
@@ -370,3 +371,7 @@ go mod tidy
 Routeur [chi](https://github.com/go-chi/chi) (léger, idiomatique), [pgx](https://github.com/jackc/pgx) pour PostgreSQL sans ORM, `log/slog` (stdlib) pour le logging structuré, `google/uuid` pour les identités, bus d'événements in-process fait maison. Migrations via [golang-migrate](https://github.com/golang-migrate/migrate), lint via [golangci-lint](https://golangci-lint.run). Aucun framework lourd : la logique métier reste indépendante de l'infrastructure.
 
 Le montant monétaire (`Money`) est stocké en **unités mineures entières** (centimes) pour éviter les erreurs de virgule flottante, avec une devise ISO-4217 ; toute opération arithmétique vérifie la cohérence de devise.
+
+## Licence
+
+[MIT](LICENSE) — © 2026 Al Moustapha. Clone, renomme, utilise en production : la seule obligation est de conserver l'avis de copyright.
