@@ -17,6 +17,7 @@ import (
 	httpadapter "github.com/example/go-ddd-hex/internal/adapters/inbound/http"
 	"github.com/example/go-ddd-hex/internal/adapters/outbound/eventbus"
 	"github.com/example/go-ddd-hex/internal/adapters/outbound/memory"
+	metricsadapter "github.com/example/go-ddd-hex/internal/adapters/outbound/metrics"
 	"github.com/example/go-ddd-hex/internal/adapters/outbound/outbox"
 	pg "github.com/example/go-ddd-hex/internal/adapters/outbound/postgres"
 	appaccount "github.com/example/go-ddd-hex/internal/application/account"
@@ -28,6 +29,7 @@ import (
 	"github.com/example/go-ddd-hex/internal/domain/shared"
 	domainuser "github.com/example/go-ddd-hex/internal/domain/user"
 	"github.com/example/go-ddd-hex/internal/platform/config"
+	appmetrics "github.com/example/go-ddd-hex/internal/platform/metrics"
 )
 
 // App holds the assembled server and any resources that must be closed on
@@ -79,21 +81,36 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 		log.Info("using in-memory repositories")
 	}
 
+	// Observability. The registry is created HERE and injected, never taken from
+	// prometheus.DefaultRegisterer: a global registry is shared process state
+	// that cannot be reset or duplicated.
+	metricsRegistry := appmetrics.New()
+
+	// Instrumenting an outbound port means WRAPPING it — the use cases keep
+	// their order.Repository and never learn they are being measured. One port
+	// is decorated as a demonstration; the same line applies to any other.
+	orderRepo = metricsadapter.NewOrderRepository(orderRepo, metricsRegistry)
+
 	// In-process event bus. Handlers subscribe here to project and to coordinate
 	// across aggregates. Order events reach it via the outbox relay; user events
 	// are published directly (see note below).
+	//
+	// The counter decorates the BUS and nothing else. Wrapping the outbox
+	// publisher as well would count every order event twice: once on the write
+	// to the outbox table, once when the relay forwards it here.
 	bus := eventbus.New(log)
+	busWithMetrics := metricsadapter.NewEventPublisher(bus, metricsRegistry)
 
 	// Outbox: the order command side writes events to this store transactionally,
 	// and the relay forwards them to the bus (at-least-once).
 	outboxPublisher := outbox.NewPublisher(outboxStore)
-	relay := outbox.NewRelay(outboxStore, bus, log)
+	relay := outbox.NewRelay(outboxStore, busWithMetrics, log)
 
 	// User command use cases. NOTE: the user context publishes DIRECTLY to the
 	// bus (no outbox) on purpose, to contrast with the order context — it still
 	// carries the dual-write risk the outbox removes. Wiring it through the
 	// outbox would be identical to the order context below.
-	userUC := appuser.NewService(userRepo, bus, log)
+	userUC := appuser.NewService(userRepo, busWithMetrics, log)
 
 	// Order COMMAND side: writes aggregate + events atomically via the unit of
 	// work and the outbox publisher, and uses the relay as its dispatch hint.
@@ -138,6 +155,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 		AccountUC:      accountUC,
 		AccountQueries: accountQueries,
 		Ready:          ready,
+		Metrics:        metricsRegistry,
 	}, log)
 
 	return &App{Server: server, pool: pool, relay: relay}, nil

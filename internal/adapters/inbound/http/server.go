@@ -15,6 +15,7 @@ import (
 	appaccount "github.com/example/go-ddd-hex/internal/application/account"
 	apporder "github.com/example/go-ddd-hex/internal/application/order"
 	app "github.com/example/go-ddd-hex/internal/application/user"
+	appmetrics "github.com/example/go-ddd-hex/internal/platform/metrics"
 )
 
 const (
@@ -54,6 +55,11 @@ type ServerDeps struct {
 
 	// Ready probes the outbound dependencies. Optional; nil means always ready.
 	Ready ReadinessCheck
+
+	// Metrics carries the collectors. Optional: nil leaves /metrics unmounted
+	// and the recording middleware off, which is what lets a test build a
+	// server without wiring observability.
+	Metrics *appmetrics.Metrics
 }
 
 // NewServer builds the fully-routed *http.Server.
@@ -80,11 +86,21 @@ func NewServer(addr string, deps ServerDeps, log *slog.Logger) *http.Server {
 	r.Get("/health", healthCheck)
 	r.Get("/ready", readinessHandler(deps.Ready, log))
 
+	// /metrics joins the probes outside both the access log and the recording
+	// middleware: a scrape every fifteen seconds has no business counting
+	// itself, nor skewing the latency histogram with its own duration.
+	if deps.Metrics != nil {
+		r.Method(http.MethodGet, "/metrics", deps.Metrics.Handler())
+	}
+
 	userHandler := NewUserHandler(deps.UserUC, log)
 	orderHandler := NewOrderHandler(deps.OrderUC, deps.OrderQueries, log)
 	accountHandler := NewAccountHandler(deps.AccountUC, deps.AccountQueries, log)
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Use(accessLog(log))
+		if deps.Metrics != nil {
+			api.Use(recordMetrics(deps.Metrics))
+		}
 		userHandler.Routes(api)
 		orderHandler.Routes(api)
 		accountHandler.Routes(api)

@@ -70,7 +70,7 @@ migrations/                  Migrations SQL (golang-migrate)
 
 ## Démarrage rapide
 
-Prérequis : Go 1.24+.
+Prérequis : Go 1.25+ (imposé par prometheus/client_golang).
 
 ```bash
 # 1. Récupérer les dépendances
@@ -142,6 +142,7 @@ make run
 |---------|------------------------------------|---------------------------|
 | GET     | `/health`                          | **Liveness** — le process répond (200 même base injoignable) |
 | GET     | `/ready`                           | **Readiness** — les dépendances répondent (**503** si la base ne répond pas) |
+| GET     | `/metrics`                         | Exposition Prometheus |
 | POST    | `/api/v1/users`                    | Créer un utilisateur      |
 | GET     | `/api/v1/users?limit=&offset=`     | Lister                    |
 | GET     | `/api/v1/users/{id}`               | Récupérer par ID          |
@@ -371,6 +372,36 @@ go mod tidy
 Routeur [chi](https://github.com/go-chi/chi) (léger, idiomatique), [pgx](https://github.com/jackc/pgx) pour PostgreSQL sans ORM, `log/slog` (stdlib) pour le logging structuré, `google/uuid` pour les identités, bus d'événements in-process fait maison. Migrations via [golang-migrate](https://github.com/golang-migrate/migrate), lint via [golangci-lint](https://golangci-lint.run). Aucun framework lourd : la logique métier reste indépendante de l'infrastructure.
 
 Le montant monétaire (`Money`) est stocké en **unités mineures entières** (centimes) pour éviter les erreurs de virgule flottante, avec une devise ISO-4217 ; toute opération arithmétique vérifie la cohérence de devise.
+
+## Observabilité
+
+Deux signaux, tous deux obtenus **sans toucher au domaine ni aux use cases** — c'est le point.
+
+**Logs corrélés.** Un décorateur de `slog.Handler` (`platform/logging`) lit le contexte et estampille chaque enregistrement du `request_id` de la requête. Comme le code appelait déjà `InfoContext`/`ErrorContext` partout, aucun point de log n'a été modifié. Un `X-Request-Id` entrant est conservé et renvoyé, ce qui permet de suivre une requête à travers plusieurs services.
+
+**Métriques Prometheus**, sur `/metrics` :
+
+```bash
+curl localhost:8080/metrics
+```
+
+| Métrique | Labels | Ce qu'elle dit |
+|---|---|---|
+| `http_requests_total` | method, route, status | débit et taux d'erreur |
+| `http_request_duration_seconds` | method, route | latence perçue |
+| `domain_events_total` | event | activité **métier** : commandes soumises, utilisateurs inscrits |
+| `repository_operation_duration_seconds` | port, op | où passe le temps côté sortie |
+| `repository_errors_total` | port, op | pannes d'infrastructure (les `ErrNotFound` sont exclus) |
+
+Trois mécanismes d'instrumentation, tous dans les adaptateurs :
+
+1. **Middleware HTTP** pour les signaux RED. Le label de route est le **motif chi** (`/api/v1/orders/{id}`), jamais le chemin brut — sinon chaque identifiant créerait sa propre série et ferait exploser la cardinalité. À l'inverse, le log d'accès enregistre le chemin **brut** : un log sert à déboguer *cette* requête, une métrique à agréger *toutes* les requêtes.
+2. **Décorateur de `shared.EventPublisher`** pour les métriques métier. Il enveloppe le bus et lui seul : envelopper aussi l'outbox compterait deux fois chaque événement de commande.
+3. **Décorateur de port sortant** (`adapters/outbound/metrics`) pour la latence des repositories. C'est la démonstration de ce que l'hexagone permet : ajouter une préoccupation transverse en **enveloppant un port**, sans toucher une ligne de métier — le câblage se fait dans la composition root. Un seul port est décoré ; le même patron s'applique tel quel à n'importe quel autre.
+
+Le registre Prometheus est **explicite**, créé dans la composition root et injecté, jamais `prometheus.DefaultRegisterer` : un registre global est un état partagé de processus que rien ne remet à zéro entre deux tests.
+
+Pas de traces : elles coûteraient 6 dépendances directes et feraient passer le graphe de 22 à 61 modules (gRPC, protobuf). Les métriques disent *qu'*une chose est lente, la corrélation par `request_id` aide à savoir *laquelle*.
 
 ## Licence
 
