@@ -72,7 +72,9 @@ func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]*domain
 	}
 	defer rows.Close()
 
-	var users []*domain.User
+	// Non-nil so an empty page serialises as [] and not null (see
+	// internal/adapters/contract).
+	users := make([]*domain.User, 0)
 	for rows.Next() {
 		u, err := scanRow(rows)
 		if err != nil {

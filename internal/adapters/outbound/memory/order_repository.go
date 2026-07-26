@@ -40,7 +40,9 @@ func (r *OrderRepository) FindByID(_ context.Context, id order.ID) (*order.Order
 func (r *OrderRepository) ListByCustomer(_ context.Context, customerID order.CustomerID) ([]*order.Order, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	var out []*order.Order
+	// Non-nil so an empty result serialises as [] and not null, matching the
+	// Postgres adapter (see internal/adapters/contract).
+	out := make([]*order.Order, 0)
 	for _, o := range r.byID {
 		if o.CustomerID().String() == customerID.String() {
 			out = append(out, cloneOrder(o))

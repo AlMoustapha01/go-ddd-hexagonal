@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"sort"
 	"sync"
 
 	"github.com/example/go-ddd-hex/internal/domain/shared"
@@ -34,15 +35,24 @@ func (s *OutboxStore) Add(_ context.Context, records ...shared.OutboxRecord) err
 }
 
 // FetchUnpublished returns up to limit pending records, oldest first.
+//
+// The records are ordered by OccurredAt rather than by insertion order. In
+// practice the two coincide, but "oldest first" is a promise about the events
+// themselves — and it is what the Postgres adapter delivers with its
+// ORDER BY occurred_at, so the in-memory driver must not differ.
 func (s *OutboxStore) FetchUnpublished(_ context.Context, limit int) ([]shared.OutboxRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if limit <= 0 || limit > len(s.pending) {
-		limit = len(s.pending)
+
+	out := make([]shared.OutboxRecord, len(s.pending))
+	copy(out, s.pending)
+	// Stable so that records sharing a timestamp keep their insertion order.
+	sort.SliceStable(out, func(i, j int) bool { return out[i].OccurredAt.Before(out[j].OccurredAt) })
+
+	if limit <= 0 || limit > len(out) {
+		limit = len(out)
 	}
-	out := make([]shared.OutboxRecord, limit)
-	copy(out, s.pending[:limit])
-	return out, nil
+	return out[:limit], nil
 }
 
 // MarkPublished removes the given records from the pending set.

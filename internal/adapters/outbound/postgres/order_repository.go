@@ -99,7 +99,8 @@ func (r *OrderRepository) queryOrders(ctx context.Context, q string, args ...any
 	}
 	defer rows.Close()
 
-	var orders []*order.Order
+	// Non-nil so an empty result serialises as [] and not null.
+	orders := make([]*order.Order, 0)
 	for rows.Next() {
 		o, err := scanOrder(rows)
 		if err != nil {

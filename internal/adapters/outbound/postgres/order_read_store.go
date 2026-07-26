@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -53,8 +54,25 @@ func (s *OrderReadStore) Upsert(ctx context.Context, d apporder.DetailView) erro
 	return nil
 }
 
+// isUUID reports whether a lookup key can possibly match a row.
+//
+// The read-side ports take plain strings, and HTTP handlers pass path
+// parameters straight through without validating them. The id and customer_id
+// columns are typed UUID, so a malformed key makes Postgres raise
+// "invalid input syntax for type uuid" — which used to surface as a 500 where
+// the in-memory adapter simply found nothing and produced a 404. A key that
+// cannot be a UUID cannot match a row, so treat it as "no such row" and keep
+// the two adapters indistinguishable.
+func isUUID(s string) bool {
+	_, err := uuid.Parse(s)
+	return err == nil
+}
+
 // Delete removes a projection row.
 func (s *OrderReadStore) Delete(ctx context.Context, id string) error {
+	if !isUUID(id) {
+		return nil // nothing could match; deleting an absent row is a no-op
+	}
 	if _, err := s.pool.Exec(ctx, `DELETE FROM order_read WHERE id = $1`, id); err != nil {
 		return fmt.Errorf("postgres: delete read order: %w", err)
 	}
@@ -63,6 +81,9 @@ func (s *OrderReadStore) Delete(ctx context.Context, id string) error {
 
 // Get returns a detail projection or domain order.ErrNotFound.
 func (s *OrderReadStore) Get(ctx context.Context, id string) (apporder.DetailView, error) {
+	if !isUUID(id) {
+		return apporder.DetailView{}, domainorder.ErrNotFound
+	}
 	const q = `
 		SELECT id, customer_id, status, currency, total_minor, item_count, lines, created_at, updated_at
 		FROM order_read WHERE id = $1`
@@ -97,6 +118,9 @@ func (s *OrderReadStore) List(ctx context.Context, limit, offset int) ([]apporde
 
 // ListByCustomer returns a customer's summaries, newest first.
 func (s *OrderReadStore) ListByCustomer(ctx context.Context, customerID string) ([]apporder.SummaryView, error) {
+	if !isUUID(customerID) {
+		return make([]apporder.SummaryView, 0), nil
+	}
 	const q = `
 		SELECT id, customer_id, status, currency, total_minor, item_count, updated_at
 		FROM order_read WHERE customer_id = $1 ORDER BY updated_at DESC`
@@ -110,7 +134,8 @@ func (s *OrderReadStore) querySummaries(ctx context.Context, q string, args ...a
 	}
 	defer rows.Close()
 
-	var out []apporder.SummaryView
+	// Non-nil so an empty result serialises as [] and not null.
+	out := make([]apporder.SummaryView, 0)
 	for rows.Next() {
 		var v apporder.SummaryView
 		if err := rows.Scan(&v.ID, &v.CustomerID, &v.Status, &v.Currency, &v.TotalMinor, &v.ItemCount, &v.UpdatedAt); err != nil {

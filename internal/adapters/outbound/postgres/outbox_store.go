@@ -51,7 +51,8 @@ func (s *OutboxStore) FetchUnpublished(ctx context.Context, limit int) ([]shared
 	}
 	defer rows.Close()
 
-	var out []shared.OutboxRecord
+	// Non-nil so an empty batch serialises as [] and not null.
+	out := make([]shared.OutboxRecord, 0)
 	for rows.Next() {
 		var rec shared.OutboxRecord
 		if err := rows.Scan(&rec.ID, &rec.EventName, &rec.AggregateID, &rec.Payload, &rec.OccurredAt); err != nil {

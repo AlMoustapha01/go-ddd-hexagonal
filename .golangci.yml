@@ -64,6 +64,19 @@ linters:
           - gocyclo
           - unparam
           - errorlint
+      # internal/adapters/contract is test code that cannot live in _test.go
+      # files, because both adapter test packages must import it (the pattern
+      # the standard library uses for testing/fstest). It gets the same
+      # relaxations as any other test code: long tables of t.Run sub-tests trip
+      # gocyclo by construction, and fixture builders legitimately take
+      # parameters that only ever receive one value today.
+      - path: adapters/contract/
+        linters:
+          - gosec
+          - errcheck
+          - gocyclo
+          - unparam
+          - errorlint
 
 formatters:
   enable:
