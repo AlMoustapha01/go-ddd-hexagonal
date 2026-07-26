@@ -35,9 +35,12 @@ test-integration: ## Run all tests INCLUDING the Postgres contract (needs test-d
 	TEST_DATABASE_URL="$(TEST_DATABASE_URL)" go test -race -count=1 $(PKG)
 
 .PHONY: cover
-cover: ## Run tests with coverage report
-	go test -race -coverprofile=coverage.out $(PKG)
-	go tool cover -func=coverage.out
+cover: ## Run tests with coverage report (credits code wherever it is exercised)
+	# -coverpkg matters: without it each package is credited only with what its
+	# OWN tests execute, so a layer driven from the one above it — the
+	# application layer, exercised by the HTTP tests — reads as 0%.
+	go test -race -coverpkg=./internal/... -coverprofile=coverage.out $(PKG)
+	go tool cover -func=coverage.out | tail -1
 
 .PHONY: vet
 vet: ## Run go vet
