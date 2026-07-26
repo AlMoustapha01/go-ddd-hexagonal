@@ -50,14 +50,14 @@ func Decode(name string, payload []byte) (shared.Event, error) {
 	if err != nil {
 		return nil, fmt.Errorf("account: decode id: %w", err)
 	}
-	base := newBase(dto.OccurredAt)
+	b := newBase(id, dto.OccurredAt)
 	switch name {
 	case "account.opened":
-		return Opened{BaseEvent: base, AccountID: id, Currency: dto.Currency}, nil
+		return Opened{base: b, Currency: dto.Currency}, nil
 	case "account.deposited":
-		return Deposited{BaseEvent: base, AccountID: id, Amount: dto.Amount, Currency: dto.Currency}, nil
+		return Deposited{base: b, Amount: dto.Amount, Currency: dto.Currency}, nil
 	case "account.withdrawn":
-		return Withdrawn{BaseEvent: base, AccountID: id, Amount: dto.Amount, Currency: dto.Currency}, nil
+		return Withdrawn{base: b, Amount: dto.Amount, Currency: dto.Currency}, nil
 	default:
 		return nil, fmt.Errorf("%w: %q", ErrUnknownEvent, name)
 	}

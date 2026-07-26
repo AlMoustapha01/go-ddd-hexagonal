@@ -11,31 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/example/go-ddd-hex/internal/domain/shared"
 )
-
-// ID is the identity of a User aggregate.
-type ID struct {
-	value uuid.UUID
-}
-
-// NewID generates a fresh identity.
-func NewID() ID { return ID{value: uuid.New()} }
-
-// IDFromString parses an identity from its string form.
-func IDFromString(s string) (ID, error) {
-	u, err := uuid.Parse(s)
-	if err != nil {
-		return ID{}, ErrNotFound
-	}
-	return ID{value: u}, nil
-}
-
-func (id ID) String() string   { return id.value.String() }
-func (id ID) Equals(o ID) bool { return id.value == o.value }
-func (id ID) IsZero() bool     { return id.value == uuid.Nil }
 
 // User is the aggregate root. It protects its invariants: state can only be
 // changed through its methods, never by mutating fields from outside the
@@ -71,7 +48,7 @@ func Register(name string, email Email) (*User, error) {
 		createdAt: now,
 		updatedAt: now,
 	}
-	u.record(Registered{BaseEvent: newBase(now), UserID: u.id, Email: email})
+	u.record(Registered{BaseEvent: shared.EventAt(now), UserID: u.id, Email: email})
 	return u, nil
 }
 
@@ -97,7 +74,7 @@ func (u *User) Activate() error {
 	}
 	u.active = true
 	u.touch()
-	u.record(Activated{BaseEvent: newBase(u.updatedAt), UserID: u.id})
+	u.record(Activated{BaseEvent: shared.EventAt(u.updatedAt), UserID: u.id})
 	return nil
 }
 
@@ -108,7 +85,7 @@ func (u *User) Deactivate() error {
 	}
 	u.active = false
 	u.touch()
-	u.record(Deactivated{BaseEvent: newBase(u.updatedAt), UserID: u.id})
+	u.record(Deactivated{BaseEvent: shared.EventAt(u.updatedAt), UserID: u.id})
 	return nil
 }
 

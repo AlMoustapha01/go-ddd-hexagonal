@@ -10,23 +10,48 @@ import (
 // bus as user events. Every state change emits one, which lets the CQRS
 // projector keep the read model in sync for the whole lifecycle.
 
+// base is what every order event has in common: when it happened, and which
+// order it concerns. Embedding it declares the OrderID field and the AggregateID
+// method once instead of five times, and is what makes every order event satisfy
+// shared.Keyed so the projector and the outbox can route them without knowing
+// the concrete types.
+//
+// It lives here rather than in the shared kernel on purpose. shared.Keyed is an
+// OPTIONAL interface, discovered by type assertion; user events deliberately do
+// not implement it. Hoisting AggregateID onto shared.BaseEvent would make every
+// event in the system Keyed at once and erase that distinction.
+type base struct {
+	shared.BaseEvent
+	OrderID ID
+}
+
+// AggregateID returns the order id (implements shared.Keyed).
+func (e base) AggregateID() string { return e.OrderID.String() }
+
+// newBase builds the common part of an order event.
+func newBase(id ID, at time.Time) base {
+	return base{BaseEvent: shared.EventAt(at), OrderID: id}
+}
+
 // Created is emitted when a new draft order is opened.
 type Created struct {
-	shared.BaseEvent
-	OrderID    ID
+	base
 	CustomerID CustomerID
 }
 
 // EventName identifies the event on the bus.
 func (Created) EventName() string { return "order.created" }
 
-// AggregateID returns the order id (implements shared.Keyed).
-func (e Created) AggregateID() string { return e.OrderID.String() }
+// Compile-time proof that embedding base really does carry both interfaces
+// through to the concrete events the bus and the projector consume.
+var (
+	_ shared.Event = Created{}
+	_ shared.Keyed = Created{}
+)
 
 // LineAdded is emitted when a product line is added to a draft order.
 type LineAdded struct {
-	shared.BaseEvent
-	OrderID   ID
+	base
 	ProductID string
 	Quantity  int
 }
@@ -34,43 +59,26 @@ type LineAdded struct {
 // EventName identifies the event on the bus.
 func (LineAdded) EventName() string { return "order.line_added" }
 
-// AggregateID returns the order id (implements shared.Keyed).
-func (e LineAdded) AggregateID() string { return e.OrderID.String() }
-
 // Placed is emitted when a draft order is submitted.
 type Placed struct {
-	shared.BaseEvent
-	OrderID    ID
+	base
 	CustomerID CustomerID
 	Total      Money
 }
 
 func (Placed) EventName() string { return "order.placed" }
 
-// AggregateID returns the order id (implements shared.Keyed).
-func (e Placed) AggregateID() string { return e.OrderID.String() }
-
 // Paid is emitted when a placed order is paid.
 type Paid struct {
-	shared.BaseEvent
-	OrderID ID
+	base
 }
 
 func (Paid) EventName() string { return "order.paid" }
 
-// AggregateID returns the order id (implements shared.Keyed).
-func (e Paid) AggregateID() string { return e.OrderID.String() }
-
 // Cancelled is emitted when an order is cancelled.
 type Cancelled struct {
-	shared.BaseEvent
-	OrderID ID
-	Reason  string
+	base
+	Reason string
 }
 
 func (Cancelled) EventName() string { return "order.cancelled" }
-
-// AggregateID returns the order id (implements shared.Keyed).
-func (e Cancelled) AggregateID() string { return e.OrderID.String() }
-
-func newBase(at time.Time) shared.BaseEvent { return shared.BaseEvent{At: at} }

@@ -32,7 +32,8 @@ func Open(currency string) (*Account, error) {
 		return nil, ErrInvalidCurrency
 	}
 	a := &Account{}
-	a.raise(Opened{BaseEvent: newBase(time.Now().UTC()), AccountID: NewID(), Currency: currency})
+	// The aggregate has no identity yet — the Opened event is what mints it.
+	a.raise(Opened{base: newBase(NewID(), time.Now().UTC()), Currency: currency})
 	return a, nil
 }
 
@@ -52,7 +53,7 @@ func (a *Account) Deposit(amount int64) error {
 	if amount <= 0 {
 		return ErrInvalidAmount
 	}
-	a.raise(Deposited{BaseEvent: newBase(time.Now().UTC()), AccountID: a.id, Amount: amount, Currency: a.currency})
+	a.raise(Deposited{base: newBase(a.id, time.Now().UTC()), Amount: amount, Currency: a.currency})
 	return nil
 }
 
@@ -65,7 +66,7 @@ func (a *Account) Withdraw(amount int64) error {
 	if amount > a.balance {
 		return ErrInsufficientFunds
 	}
-	a.raise(Withdrawn{BaseEvent: newBase(time.Now().UTC()), AccountID: a.id, Amount: amount, Currency: a.currency})
+	a.raise(Withdrawn{base: newBase(a.id, time.Now().UTC()), Amount: amount, Currency: a.currency})
 	return nil
 }
 

@@ -45,7 +45,7 @@ func NewDraft(customerID CustomerID, currency string) (*Order, error) {
 		createdAt:  now,
 		updatedAt:  now,
 	}
-	o.record(Created{BaseEvent: newBase(now), OrderID: o.id, CustomerID: customerID})
+	o.record(Created{base: newBase(o.id, now), CustomerID: customerID})
 	return o, nil
 }
 
@@ -78,7 +78,7 @@ func (o *Order) AddLine(productID string, unitPrice Money, quantity int) error {
 	}
 	o.lines = append(o.lines, line)
 	o.touch()
-	o.record(LineAdded{BaseEvent: newBase(o.updatedAt), OrderID: o.id, ProductID: line.productID, Quantity: line.quantity})
+	o.record(LineAdded{base: newBase(o.id, o.updatedAt), ProductID: line.productID, Quantity: line.quantity})
 	return nil
 }
 
@@ -97,7 +97,7 @@ func (o *Order) Place() error {
 	}
 	o.status = StatusPlaced
 	o.touch()
-	o.record(Placed{BaseEvent: newBase(o.updatedAt), OrderID: o.id, CustomerID: o.customerID, Total: total})
+	o.record(Placed{base: newBase(o.id, o.updatedAt), CustomerID: o.customerID, Total: total})
 	return nil
 }
 
@@ -108,7 +108,7 @@ func (o *Order) Pay() error {
 	}
 	o.status = StatusPaid
 	o.touch()
-	o.record(Paid{BaseEvent: newBase(o.updatedAt), OrderID: o.id})
+	o.record(Paid{base: newBase(o.id, o.updatedAt)})
 	return nil
 }
 
@@ -121,7 +121,7 @@ func (o *Order) Cancel(reason string) error {
 	}
 	o.status = StatusCancelled
 	o.touch()
-	o.record(Cancelled{BaseEvent: newBase(o.updatedAt), OrderID: o.id, Reason: reason})
+	o.record(Cancelled{base: newBase(o.id, o.updatedAt), Reason: reason})
 	return nil
 }
 
